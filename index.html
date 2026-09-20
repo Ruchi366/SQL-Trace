@@ -1,0 +1,1349 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>SQL::TRACE — Interactive Query Engine Visualizer</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<style>
+:root{
+  --bg:#0A0E14;
+  --panel:#0D1117;
+  --panel-alt:#11161D;
+  --border:#232B36;
+  --border-soft:#1B222C;
+  --text:#C9D1D9;
+  --text-dim:#6E7A88;
+  --text-bright:#F0F6FC;
+  --cyan:#00F0FF;
+  --emerald:#00E676;
+  --amber:#FFB300;
+  --red:#FF5252;
+  --slate:#8B949E;
+  --violet:#B084F5;
+  --font: 'JetBrains Mono', 'SFMono-Regular', Consolas, monospace;
+}
+*{box-sizing:border-box;}
+html,body{margin:0;padding:0;height:100%;width:100%;overflow:hidden;background:var(--bg);color:var(--text);font-family:var(--font);}
+::-webkit-scrollbar{width:6px;height:6px;}
+::-webkit-scrollbar-track{background:transparent;}
+::-webkit-scrollbar-thumb{background:#2A323D;border-radius:3px;}
+::-webkit-scrollbar-thumb:hover{background:#39424F;}
+button{font-family:var(--font);cursor:pointer;}
+select,input{font-family:var(--font);}
+
+.app{display:flex;flex-direction:column;height:100vh;width:100vw;}
+
+/* ===== TOP BAR ===== */
+.topbar{
+  height:56px;flex:0 0 56px;display:flex;align-items:center;justify-content:space-between;
+  padding:0 16px;background:linear-gradient(180deg,#0F1520,#0A0E14);border-bottom:1px solid var(--border);
+  position:relative;z-index:20;
+}
+.topbar-left{display:flex;align-items:center;gap:14px;}
+.brand-pill{display:flex;align-items:center;gap:8px;}
+.brand-logo{color:var(--cyan);font-weight:800;font-size:14px;letter-spacing:0.5px;text-shadow:0 0 14px rgba(0,240,255,0.45);}
+.engine-chip{display:flex;align-items:center;gap:6px;font-size:11px;color:var(--slate);background:#131A24;border:1px solid var(--border);padding:3px 9px;border-radius:20px;}
+.dot{width:6px;height:6px;border-radius:50%;background:var(--emerald);box-shadow:0 0 8px var(--emerald);flex:none;}
+.dot.pulse{animation:pulseDot 1.6s ease-in-out infinite;}
+@keyframes pulseDot{0%,100%{opacity:1;}50%{opacity:0.35;}}
+
+.db-select{
+  width:170px;background:#131A24;border:1px solid var(--border);color:var(--text);
+  font-size:11px;padding:6px 8px;border-radius:4px;outline:none;
+}
+.db-select:focus{border-color:var(--cyan);}
+
+.topbar-center{display:flex;gap:8px;flex:1;justify-content:center;overflow:hidden;padding:0 12px;}
+.chip{
+  background:#131A24;border:1px solid var(--border);color:var(--slate);font-size:11px;
+  padding:6px 11px;border-radius:5px;white-space:nowrap;transition:border-color .15s, color .15s, transform .1s;
+}
+.chip:hover{border-color:#3A4552;color:var(--text-bright);transform:translateY(-1px);}
+.chip.active{border-color:var(--cyan);color:var(--cyan);box-shadow:0 0 10px rgba(0,240,255,0.15) inset;}
+.chip.amber{border-color:rgba(255,179,0,0.35);color:var(--amber);}
+.chip.amber:hover{border-color:var(--amber);}
+
+.topbar-right{display:flex;align-items:center;gap:8px;}
+.btn{border-radius:4px;padding:7px 14px;font-size:12px;font-weight:600;border:1px solid transparent;transition:transform .12s, box-shadow .12s, opacity .12s;}
+.btn:active{transform:scale(0.97);}
+.btn-reset{background:transparent;border:1px solid var(--red);color:var(--red);}
+.btn-reset:hover{background:rgba(255,82,82,0.08);}
+.btn-run{background:var(--emerald);color:#00170B;box-shadow:0 0 12px rgba(0,230,118,0.35);}
+.btn-run:hover{transform:scale(1.02);}
+.btn-run:disabled{opacity:0.45;box-shadow:none;cursor:default;transform:none;}
+
+/* ===== MAIN GRID ===== */
+.main{flex:1;display:flex;min-height:0;}
+.left-panel{width:38%;display:flex;flex-direction:column;border-right:1px solid var(--border);min-width:340px;}
+.right-panel{width:62%;display:flex;flex-direction:column;min-width:0;}
+
+.section-a{height:52%;display:flex;flex-direction:column;border-bottom:1px solid var(--border);min-height:0;}
+.section-b{height:48%;display:flex;flex-direction:column;min-height:0;}
+.section-c{height:65%;display:flex;flex-direction:column;border-bottom:1px solid var(--border);min-height:0;position:relative;}
+.section-d{height:35%;display:flex;flex-direction:column;min-height:0;}
+
+/* ---- Section A: editor ---- */
+.editor-header{
+  height:32px;flex:0 0 32px;background:var(--panel);display:flex;align-items:center;justify-content:space-between;
+  padding:0 10px;border-bottom:1px solid var(--border-soft);
+}
+.tab-title{display:flex;align-items:center;gap:7px;font-size:11.5px;color:var(--text-dim);}
+.dirty-dot{width:6px;height:6px;border-radius:50%;background:var(--amber);display:none;}
+.dirty-dot.show{display:inline-block;}
+.editor-actions{display:flex;gap:6px;}
+.mini-btn{background:transparent;border:1px solid var(--border);color:var(--slate);font-size:10.5px;padding:4px 8px;border-radius:4px;}
+.mini-btn:hover{color:var(--text-bright);border-color:#3A4552;}
+
+.editor-wrap{flex:1;position:relative;min-height:0;background:#0B0F16;}
+#sqlInput{
+  position:absolute;inset:0;width:100%;height:100%;resize:none;border:none;outline:none;
+  background:transparent;color:#DCE4EC;font-family:var(--font);font-size:13px;line-height:1.65;
+  padding:14px 16px;caret-color:var(--cyan);
+}
+.editor-linebg{position:absolute;inset:0;pointer-events:none;background-image:linear-gradient(180deg,transparent,transparent);}
+.hud-pill{
+  position:absolute;bottom:12px;right:16px;z-index:10;background:rgba(13,17,23,0.92);border:1px solid var(--border);
+  border-radius:20px;padding:5px 12px;font-size:10.5px;display:flex;align-items:center;gap:8px;backdrop-filter:blur(4px);
+}
+.hud-label{color:var(--text-dim);}
+.hud-value{font-weight:700;padding:1px 7px;border-radius:10px;}
+.hud-value.low{color:#00170B;background:var(--emerald);}
+.hud-value.mid{color:#1F1400;background:var(--amber);}
+.hud-value.high{color:#210000;background:var(--red);}
+
+/* ---- Section B: transport + telemetry ---- */
+.transport{
+  height:44px;flex:0 0 44px;background:#0B0F16;border-top:1px solid var(--border);border-bottom:1px solid var(--border-soft);
+  display:flex;align-items:center;gap:12px;padding:0 12px;
+}
+.tbtn{
+  width:28px;height:28px;border-radius:50%;border:1px solid var(--border);background:#131A24;color:var(--text);
+  display:flex;align-items:center;justify-content:center;font-size:12px;transition:border-color .15s;flex:none;
+}
+.tbtn:hover{border-color:var(--cyan);color:var(--cyan);}
+.tbtn.square{border-radius:5px;width:26px;}
+.tbtn:disabled{opacity:.35;cursor:default;}
+.speed-wrap{display:flex;align-items:center;gap:8px;flex:1;min-width:0;}
+.speed-wrap label{font-size:10px;color:var(--text-dim);white-space:nowrap;}
+input[type=range]{flex:1;accent-color:var(--cyan);height:3px;}
+.speed-val{font-size:11px;color:var(--cyan);width:36px;text-align:right;flex:none;}
+
+.telemetry{flex:1;display:grid;grid-template-columns:1fr 1fr;grid-template-rows:1fr 1fr;gap:8px;padding:10px;min-height:0;}
+.tcard{
+  background:linear-gradient(160deg,#101720,#0B0F16);border:1px solid var(--border);border-radius:6px;
+  padding:9px 11px;display:flex;flex-direction:column;justify-content:space-between;min-width:0;
+}
+.tcard .tlabel{font-size:9.5px;color:var(--text-dim);letter-spacing:.3px;}
+.tcard .tvalue{font-size:14px;font-weight:700;color:var(--text-bright);margin-top:3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.tbar{height:4px;border-radius:2px;background:#1B222C;margin-top:6px;overflow:hidden;}
+.tbar-fill{height:100%;border-radius:2px;transition:width .25s ease;}
+.tbar-fill.cyan{background:var(--cyan);}
+.tbar-fill.emerald{background:var(--emerald);}
+.tbar-fill.amber{background:var(--amber);}
+.tbar-fill.violet{background:var(--violet);}
+
+/* ---- Section C: canvas ---- */
+.canvas-toolbar{
+  position:absolute;top:12px;left:16px;right:16px;z-index:6;display:flex;justify-content:space-between;pointer-events:none;
+}
+.canvas-toolbar > *{pointer-events:auto;}
+.view-switch{display:flex;background:#0D1117;border:1px solid var(--border);border-radius:6px;overflow:hidden;}
+.view-switch button{background:transparent;border:none;color:var(--slate);font-size:10.5px;padding:6px 12px;}
+.view-switch button.on{background:#182230;color:var(--cyan);}
+.zoom-pill{display:flex;flex-direction:column;background:#0D1117;border:1px solid var(--border);border-radius:6px;overflow:hidden;width:26px;}
+.zoom-pill button{background:transparent;border:none;border-bottom:1px solid var(--border-soft);color:var(--slate);font-size:12px;padding:5px 0;}
+.zoom-pill button:last-child{border-bottom:none;}
+.zoom-pill button:hover{color:var(--cyan);}
+
+.canvas-area{flex:1;position:relative;min-height:0;background:
+   radial-gradient(circle at 30% 20%, rgba(0,240,255,0.05), transparent 55%),
+   radial-gradient(circle at 80% 80%, rgba(0,230,118,0.04), transparent 55%),
+   #080B10;
+   background-image:
+   linear-gradient(rgba(255,255,255,0.025) 1px, transparent 1px),
+   linear-gradient(90deg, rgba(255,255,255,0.025) 1px, transparent 1px);
+   background-size:26px 26px;
+   overflow:hidden;
+}
+#dagLayer{position:absolute;inset:0;}
+#dagSvg{position:absolute;inset:0;width:100%;height:100%;}
+.dagnode{
+  position:absolute;transform:translate(-50%,-50%);min-width:118px;max-width:150px;background:#101720;
+  border:1.5px solid #30363D;border-radius:7px;padding:8px 10px;text-align:center;box-shadow:0 4px 14px rgba(0,0,0,0.4);
+  transition:border-color .3s, box-shadow .3s;cursor:pointer;
+}
+.dagnode:hover{border-color:#4a5666;}
+.dagnode .nlabel{font-size:10.5px;color:var(--text);line-height:1.3;}
+.dagnode .ntype{font-size:8.5px;color:var(--text-dim);text-transform:uppercase;letter-spacing:.5px;margin-top:2px;}
+.dagnode .nbadge{
+  position:absolute;bottom:-9px;right:-9px;background:#0D1117;border:1px solid #30363D;border-radius:10px;
+  font-size:9px;padding:2px 6px;color:var(--slate);
+}
+.dagnode.pending{border-color:#30363D;}
+.dagnode.executing{border-color:var(--cyan);box-shadow:0 0 16px rgba(0,240,255,0.3);}
+.dagnode.executing .nbadge{color:var(--cyan);border-color:var(--cyan);}
+.dagnode.done{border-color:var(--emerald);}
+.dagnode.done .nbadge{color:var(--emerald);border-color:var(--emerald);}
+
+#three-container{position:absolute;inset:0;display:none;}
+#three-container.on{display:block;}
+.canvas-hint{position:absolute;bottom:10px;left:16px;font-size:9.5px;color:var(--text-dim);z-index:5;}
+
+.empty-state{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;flex-direction:column;gap:8px;color:var(--text-dim);text-align:center;padding:20px;}
+.empty-state .big{font-size:13px;color:var(--slate);}
+.empty-state .small{font-size:10.5px;max-width:320px;}
+
+/* ---- Section D ---- */
+.tabbar{height:30px;flex:0 0 30px;display:flex;background:#0B0F16;border-bottom:1px solid var(--border);}
+.tabbtn{background:transparent;border:none;color:var(--text-dim);font-size:10.5px;padding:0 14px;border-right:1px solid var(--border-soft);position:relative;}
+.tabbtn.on{color:var(--cyan);}
+.tabbtn.on::after{content:'';position:absolute;left:0;right:0;bottom:-1px;height:2px;background:var(--cyan);}
+.tabpanel{flex:1;min-height:0;position:relative;overflow:auto;background:#080B10;}
+.tabpanel-inner{position:absolute;inset:0;padding:10px;}
+.tabpanel.hidden{display:none;}
+
+#btreeSvg{width:100%;height:100%;min-height:180px;}
+.bt-node-rect{fill:#101720;stroke:#30363D;stroke-width:1.3;rx:4;}
+.bt-node-rect.splitting{stroke:var(--red);animation:shake .35s ease-in-out 3;}
+@keyframes shake{0%,100%{transform:translateX(0);}25%{transform:translateX(-3px);}75%{transform:translateX(3px);}}
+.bt-key-text{fill:#DCE4EC;font-size:11px;font-family:var(--font);}
+.bt-label-text{fill:#5A6472;font-size:8.5px;font-family:var(--font);}
+.bt-edge{stroke:#3A4552;stroke-width:1.2;fill:none;}
+.bt-promo-key{fill:var(--amber);font-weight:700;font-size:12px;font-family:var(--font);}
+
+.frame-grid{display:grid;grid-template-columns:repeat(8,1fr);gap:6px;}
+.frame{
+  background:#101720;border:1px solid var(--border);border-radius:5px;padding:6px 5px;font-size:9px;color:var(--text-dim);
+  transition:background .3s, border-color .3s;min-height:52px;
+}
+.frame.hot{border-color:var(--amber);background:#1C1608;}
+.frame .fid{color:var(--text);font-weight:700;font-size:10px;}
+.frame .fmeta{margin-top:3px;}
+.frame .dirtybit{color:var(--red);}
+.frame .cleanbit{color:var(--emerald);}
+
+.tuple-list{display:flex;flex-direction:column;gap:8px;}
+.tuple-row{background:#101720;border:1px solid var(--border);border-radius:5px;padding:8px 10px;font-size:10px;}
+.tuple-row .thead{color:var(--cyan);font-size:9.5px;margin-bottom:4px;}
+.tuple-row .thex{color:var(--text-dim);word-break:break-all;font-size:9px;}
+.tuple-row .tdecoded{color:var(--text);margin-top:3px;}
+
+/* ---- Bottom Status Bar ---- */
+.statusbar{
+  height:28px;flex:0 0 28px;display:flex;align-items:center;justify-content:space-between;
+  background:#080A0E;border-top:1px solid var(--border);padding:0 12px;font-size:10.5px;color:var(--text-dim);
+}
+.status-left{display:flex;gap:6px;align-items:center;}
+.status-left b{color:var(--text);font-weight:600;}
+.status-center{color:var(--slate);}
+.status-right{display:flex;align-items:center;gap:6px;cursor:pointer;user-select:none;}
+.status-right:hover{color:var(--cyan);}
+
+/* particles */
+.particle{position:absolute;width:5px;height:5px;border-radius:50%;background:var(--cyan);box-shadow:0 0 8px var(--cyan);pointer-events:none;}
+
+@media (max-width: 900px){
+  .topbar-center{display:none;}
+}
+</style>
+</head>
+<body>
+<div class="app">
+
+  <!-- TOP BAR -->
+  <div class="topbar">
+    <div class="topbar-left">
+      <div class="brand-pill">
+        <span class="brand-logo">[SQL::TRACE]</span>
+        <span class="engine-chip"><span class="dot pulse" id="engineDot"></span><span id="engineStatusText">ENGINE: WASM-READY</span></span>
+      </div>
+      <select class="db-select" id="dbSelect">
+        <option value="tpch">TPC-H (Light)</option>
+        <option value="ecom">E-Commerce Orders (10k)</option>
+        <option value="uni">University Schema</option>
+        <option value="scratch">Custom Empty Scratchpad</option>
+      </select>
+    </div>
+    <div class="topbar-center" id="presetRow"></div>
+    <div class="topbar-right">
+      <button class="btn btn-reset" id="resetBtn">Reset Engine</button>
+      <button class="btn btn-run" id="runBtn">Run Plan</button>
+    </div>
+  </div>
+
+  <!-- MAIN -->
+  <div class="main">
+    <!-- LEFT -->
+    <div class="left-panel">
+      <div class="section-a">
+        <div class="editor-header">
+          <div class="tab-title">query.sql <span class="dirty-dot" id="dirtyDot"></span></div>
+          <div class="editor-actions">
+            <button class="mini-btn" id="formatBtn">Format</button>
+            <button class="mini-btn" id="clearBtn">Clear</button>
+          </div>
+        </div>
+        <div class="editor-wrap">
+          <textarea id="sqlInput" spellcheck="false">SELECT orders.id, customers.name, orders.amount
+FROM orders
+JOIN customers ON orders.customer_id = customers.id
+WHERE orders.amount > 500;</textarea>
+          <div class="hud-pill">
+            <span class="hud-label">est. cost</span>
+            <span class="hud-value mid" id="hudValue">O(N log M)</span>
+          </div>
+        </div>
+      </div>
+      <div class="section-b">
+        <div class="transport">
+          <button class="tbtn square" id="stepBackBtn" title="Step backward">|&lt;</button>
+          <button class="tbtn" id="playBtn" title="Play / Pause">▶</button>
+          <button class="tbtn square" id="stepFwdBtn" title="Step forward">&gt;|</button>
+          <div class="speed-wrap">
+            <label>SPEED</label>
+            <input type="range" id="speedSlider" min="0.1" max="5" step="0.1" value="1.0">
+            <span class="speed-val" id="speedVal">1.0x</span>
+          </div>
+        </div>
+        <div class="telemetry">
+          <div class="tcard">
+            <div class="tlabel">BUFFER CACHE</div>
+            <div class="tvalue" id="tCache">Hit: 0% · Miss: 0%</div>
+            <div class="tbar"><div class="tbar-fill cyan" id="tCacheBar" style="width:0%"></div></div>
+          </div>
+          <div class="tcard">
+            <div class="tlabel">DISK I/O READS</div>
+            <div class="tvalue" id="tDisk">0 Pages (0 KB)</div>
+            <div class="tbar"><div class="tbar-fill amber" id="tDiskBar" style="width:0%"></div></div>
+          </div>
+          <div class="tcard">
+            <div class="tlabel">ROW OUTPUT</div>
+            <div class="tvalue" id="tRows">0 / 0 Rows</div>
+            <div class="tbar"><div class="tbar-fill emerald" id="tRowsBar" style="width:0%"></div></div>
+          </div>
+          <div class="tcard">
+            <div class="tlabel">ACTIVE MEMORY BUFFER</div>
+            <div class="tvalue" id="tMem">0 KB / 2048 KB</div>
+            <div class="tbar"><div class="tbar-fill violet" id="tMemBar" style="width:0%"></div></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- RIGHT -->
+    <div class="right-panel">
+      <div class="section-c">
+        <div class="canvas-toolbar">
+          <div class="view-switch">
+            <button id="viewDagBtn" class="on">Operator Tree (DAG)</button>
+            <button id="view3dBtn">Physical Memory Pipelines (3D)</button>
+          </div>
+          <div class="zoom-pill">
+            <button id="zoomInBtn">+</button>
+            <button id="zoomOutBtn">−</button>
+            <button id="zoomFitBtn">⤢</button>
+          </div>
+        </div>
+        <div class="canvas-area" id="canvasArea">
+          <div id="dagLayer">
+            <svg id="dagSvg"></svg>
+          </div>
+          <div id="three-container"></div>
+          <div class="empty-state" id="emptyState">
+            <div class="big">No physical plan compiled</div>
+            <div class="small">Pick a preset above, or write a query and click <b style="color:#00E676">Run Plan</b> to compile and visualize the execution DAG.</div>
+          </div>
+          <div class="canvas-hint" id="canvasHint"></div>
+        </div>
+      </div>
+      <div class="section-d">
+        <div class="tabbar">
+          <button class="tabbtn on" data-tab="btree">B+ Tree Index <span style="color:#5A6472" id="btreeActiveTable">(orders_idx)</span></button>
+          <button class="tabbtn" data-tab="pool">Buffer Pool Frame Table (LRU Cache)</button>
+          <button class="tabbtn" data-tab="tuple">Tuple Row Inspector</button>
+        </div>
+        <div class="tabpanel" id="tab-btree"><div class="tabpanel-inner"><svg id="btreeSvg"></svg></div></div>
+        <div class="tabpanel hidden" id="tab-pool"><div class="tabpanel-inner"><div class="frame-grid" id="frameGrid"></div></div></div>
+        <div class="tabpanel hidden" id="tab-tuple"><div class="tabpanel-inner"><div class="tuple-list" id="tupleList"><div class="empty-state" style="position:relative;height:100%;">No tuples produced yet.</div></div></div></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- STATUS BAR -->
+  <div class="statusbar">
+    <div class="status-left">STATE: <b id="statusState">IDLE</b> &nbsp;|&nbsp; OP: <b id="statusOp">—</b></div>
+    <div class="status-center" id="statusHeap">WASM Memory Heap: 4.1 MB / 64.0 MB Allocated</div>
+    <div class="status-right" id="engineModeToggle">Engine Mode: <b style="color:#DCE4EC" id="engineModeLabel">Rust-WASM-Native</b></div>
+  </div>
+</div>
+
+<script>
+'use strict';
+/* =========================================================================================
+   SQL::TRACE — Interactive Query Engine Visualizer
+   Single-file, dependency-light implementation (Three.js loaded via CDN for the 3D view).
+   ========================================================================================= */
+
+/* ---------------------------------- small utilities ---------------------------------- */
+function hashStr(s){let h=0;for(let i=0;i<s.length;i++){h=(h*31+s.charCodeAt(i))|0;}return Math.abs(h);}
+function clamp(v,a,b){return Math.max(a,Math.min(b,v));}
+function fmtKB(bytes){return (bytes/1024).toFixed(1);}
+function el(id){return document.getElementById(id);}
+function qs(sel,root){return (root||document).querySelector(sel);}
+function qsa(sel,root){return Array.from((root||document).querySelectorAll(sel));}
+
+/* ---------------------------------- preset definitions -------------------------------- */
+// Each preset defines: sql text, and a plan-building function returning {nodes, edges, kind}
+// nodes: {id, label, type, total, x, y, dependsOn:[ids]}
+// x,y are percentages within the canvas.
+
+const PRESETS = {
+  scanCompare: {
+    label: 'Index vs. Full Scan',
+    color: '',
+    sql: `SELECT * FROM orders\nWHERE amount > 500;`,
+    hud: {label:'O(N) vs O(log N)', tier:'mid'},
+    buildPlan(){
+      return {
+        kind:'compare',
+        nodes:{
+          scan_seq:   {label:'Seq Scan (orders)',        type:'scan',       total:1000, x:25, y:84, dependsOn:[]},
+          filter_seq: {label:'Filter (amount > 500)',     type:'filter',     total:1000, x:25, y:62, dependsOn:['scan_seq']},
+          proj_seq:   {label:'Projection',                type:'projection', total:420,  x:25, y:40, dependsOn:['filter_seq']},
+          result_seq: {label:'Result — Seq Scan Path',    type:'result',     total:420,  x:25, y:16, dependsOn:['proj_seq']},
+
+          scan_idx:   {label:'Index Scan (amount_idx)',   type:'indexscan',  total:420,  x:75, y:73, dependsOn:[]},
+          proj_idx:   {label:'Projection',                type:'projection', total:420,  x:75, y:44, dependsOn:['scan_idx']},
+          result_idx: {label:'Result — Index Scan Path',  type:'result',     total:420,  x:75, y:16, dependsOn:['proj_idx']},
+        },
+        edges:[['scan_seq','filter_seq'],['filter_seq','proj_seq'],['proj_seq','result_seq'],
+               ['scan_idx','proj_idx'],['proj_idx','result_idx']]
+      };
+    }
+  },
+  hashJoin: {
+    label: 'Hash Join vs. Nested Loop',
+    sql: `SELECT orders.id, customers.name, orders.amount\nFROM orders\nJOIN customers ON orders.customer_id = customers.id\nWHERE orders.amount > 500;`,
+    hud:{label:'O(N + M)', tier:'low'},
+    buildPlan(){
+      return {
+        kind:'single',
+        nodes:{
+          scan_cust:  {label:'Seq Scan (customers)',        type:'scan',       total:340, x:22, y:86, dependsOn:[]},
+          hashbuild:  {label:'Hash (Build customer table)', type:'hashbuild',  total:340, x:22, y:64, dependsOn:['scan_cust']},
+          scan_ord:   {label:'Index Scan (orders, amount_idx)', type:'indexscan', total:210, x:78, y:86, dependsOn:[]},
+          hashjoin:   {label:'Hash Join (probe)',            type:'join',       total:210, x:50, y:44, dependsOn:['hashbuild','scan_ord']},
+          proj:       {label:'Projection (id, name, amount)',type:'projection', total:210, x:50, y:24, dependsOn:['hashjoin']},
+          result:     {label:'Result',                       type:'result',     total:210, x:50, y:8,  dependsOn:['proj']},
+        },
+        edges:[['scan_cust','hashbuild'],['hashbuild','hashjoin'],['scan_ord','hashjoin'],['hashjoin','proj'],['proj','result']]
+      };
+    }
+  },
+  btreeSplit: {
+    label: 'B+ Tree Node Split (Inserts)',
+    amber:true,
+    sql: `INSERT INTO orders (id, customer_id, amount)\nVALUES (501, 12, 750);`,
+    hud:{label:'O(log N) + split', tier:'mid'},
+    buildPlan(){
+      return {
+        kind:'insert',
+        insertKey: 65,
+        nodes:{
+          insertop: {label:'Insert Row (orders)',        type:'insert', total:1, x:50, y:70, dependsOn:[]},
+          idxupd:   {label:'B+ Tree Update (orders_idx)', type:'idxupdate', total:1, x:50, y:38, dependsOn:['insertop']},
+          result:   {label:'Result — 1 Row Affected',    type:'result', total:1, x:50, y:12, dependsOn:['idxupd']},
+        },
+        edges:[['insertop','idxupd'],['idxupd','result']]
+      };
+    }
+  },
+  compositeRange: {
+    label: 'Composite Key Range Query',
+    sql: `SELECT * FROM orders\nWHERE customer_id = 12\n  AND amount BETWEEN 100 AND 900;`,
+    hud:{label:'O(log N)', tier:'low'},
+    buildPlan(){
+      return {
+        kind:'single',
+        nodes:{
+          scan_range: {label:'Index Range Scan (composite_idx)', type:'indexscan', total:150, x:50,y:78, dependsOn:[]},
+          proj:       {label:'Projection', type:'projection', total:45, x:50, y:46, dependsOn:['scan_range']},
+          result:     {label:'Result', type:'result', total:45, x:50, y:16, dependsOn:['proj']},
+        },
+        edges:[['scan_range','proj'],['proj','result']]
+      };
+    }
+  }
+};
+
+const DB_MULTIPLIER = {tpch:1, ecom:1.6, uni:0.5, scratch:0.15};
+
+/* ---------------------------------- generic SQL parse for free-typed queries ----------- */
+function parseCustomSQL(sqlRaw){
+  const sql = sqlRaw.trim();
+  if(/^insert/i.test(sql)){
+    let key = 55 + (hashStr(sql)%40);
+    const m = sql.match(/values\s*\(([^)]*)\)/i);
+    if(m){
+      const nums = m[1].split(',').map(s=>parseInt(s.trim(),10)).filter(n=>!isNaN(n));
+      if(nums.length) key = nums[0];
+    }
+    return {kind:'insert', insertKey: 40 + (key%50),
+      nodes:{
+        insertop:{label:'Insert Row', type:'insert', total:1, x:50,y:70, dependsOn:[]},
+        idxupd:{label:'B+ Tree Update (idx)', type:'idxupdate', total:1, x:50,y:38, dependsOn:['insertop']},
+        result:{label:'Result — 1 Row Affected', type:'result', total:1, x:50,y:12, dependsOn:['idxupd']},
+      },
+      edges:[['insertop','idxupd'],['idxupd','result']],
+      hud:{label:'O(log N) + split', tier:'mid'}
+    };
+  }
+  const tableMatch = sql.match(/from\s+([a-zA-Z_][\w]*)/i);
+  const table = tableMatch ? tableMatch[1] : 'orders';
+  const hasJoin = /\bjoin\b/i.test(sql);
+  const hasWhere = /\bwhere\b/i.test(sql);
+  const h = hashStr(sql.toLowerCase());
+  const baseRows = 300 + (h % 900);
+
+  if(hasJoin){
+    const joinTableMatch = sql.match(/join\s+([a-zA-Z_][\w]*)/i);
+    const table2 = joinTableMatch ? joinTableMatch[1] : 'related_table';
+    const rowsA = Math.round(baseRows*0.4), rowsB = Math.round(baseRows*0.25), rowsOut = Math.round(baseRows*0.3);
+    return {kind:'single',
+      nodes:{
+        scanA:{label:`Seq Scan (${table})`, type:'scan', total:rowsA, x:22,y:86, dependsOn:[]},
+        build:{label:'Hash (Build)', type:'hashbuild', total:rowsA, x:22,y:64, dependsOn:['scanA']},
+        scanB:{label:`Seq Scan (${table2})`, type:'scan', total:rowsB, x:78,y:86, dependsOn:[]},
+        join:{label:'Hash Join (probe)', type:'join', total:rowsOut, x:50,y:44, dependsOn:['build','scanB']},
+        proj:{label:'Projection', type:'projection', total:rowsOut, x:50,y:24, dependsOn:['join']},
+        result:{label:'Result', type:'result', total:rowsOut, x:50,y:8, dependsOn:['proj']},
+      },
+      edges:[['scanA','build'],['build','join'],['scanB','join'],['join','proj'],['proj','result']],
+      hud:{label:'O(N + M)', tier: rowsOut>500?'high':'low'}
+    };
+  }
+  const scanType = hasWhere ? (h%2===0?'indexscan':'scan') : 'scan';
+  const outRows = hasWhere ? Math.round(baseRows*0.35) : baseRows;
+  const scanLabel = scanType==='indexscan' ? `Index Scan (${table}_idx)` : `Seq Scan (${table})`;
+  const nodes = {
+    scan:{label:scanLabel, type:scanType, total:baseRows, x:50,y: hasWhere?82:70, dependsOn:[]},
+  };
+  const edges = [];
+  let last = 'scan';
+  if(hasWhere){
+    nodes.filter = {label:'Filter (WHERE clause)', type:'filter', total:baseRows, x:50,y:58, dependsOn:['scan']};
+    edges.push(['scan','filter']); last='filter';
+  }
+  nodes.proj = {label:'Projection', type:'projection', total:outRows, x:50,y:34, dependsOn:[last]};
+  edges.push([last,'proj']);
+  nodes.result = {label:'Result', type:'result', total:outRows, x:50,y:12, dependsOn:['proj']};
+  edges.push(['proj','result']);
+  return {kind:'single', nodes, edges, hud:{label: scanType==='indexscan'?'O(log N)':'O(N)', tier: scanType==='indexscan'?'low':(baseRows>800?'high':'mid')}};
+}
+
+/* ---------------------------------- application state ---------------------------------- */
+const State = {
+  currentPresetKey: 'hashJoin',
+  plan: null,          // {kind, nodes:{id:{...,status,rowsProcessed}}, edges, hud, insertKey}
+  running:false,
+  playTimer:null,
+  snapshots:[],         // history of deep-ish clones
+  snapshotIndex:-1,
+  bufferFrames: [],
+  frameCursor:0,
+  pageCounter:0,
+  tickCount:0,
+  telemetry:{hits:0,misses:0,diskPages:0,memBytes:0},
+  view:'dag',
+  db:'tpch',
+  tuples:[],
+};
+
+const N_FRAMES = 16;
+function initFrames(){
+  State.bufferFrames = Array.from({length:N_FRAMES},(_,i)=>({id:i,page:null,dirty:false,pins:0,hot:false}));
+}
+initFrames();
+
+/* ---------------------------------- B+ Tree model --------------------------------------- */
+// Simplified order-4 B+ tree, single level of leaves under one root, max 3 keys/node.
+const BTree = {
+  root: {keys:[25,50], children:[
+    {keys:[10,20], leaf:true},
+    {keys:[25,30,40], leaf:true},
+    {keys:[50,60,70], leaf:true},
+  ]},
+  splitting:false,
+};
+function resetBTree(){
+  BTree.root = {keys:[25,50], children:[
+    {keys:[10,20], leaf:true},
+    {keys:[25,30,40], leaf:true},
+    {keys:[50,60,70], leaf:true},
+  ]};
+  BTree.splitting = false;
+}
+
+function btreeInsert(key, cb){
+  // find target leaf index by root keys
+  const root = BTree.root;
+  let idx = 0;
+  while(idx < root.keys.length && key >= root.keys[idx]) idx++;
+  const leaf = root.children[idx];
+  // insert sorted, dedupe
+  if(!leaf.keys.includes(key)){
+    leaf.keys.push(key);
+    leaf.keys.sort((a,b)=>a-b);
+  }
+  if(leaf.keys.length > 3){
+    // overflow -> split
+    BTree.splitting = true;
+    renderBTree(idx); // render with 'splitting' highlight first
+    setTimeout(()=>{
+      const mid = Math.ceil(leaf.keys.length/2);
+      const leftKeys = leaf.keys.slice(0,mid);
+      const rightKeys = leaf.keys.slice(mid);
+      const promoted = rightKeys[0];
+      const newLeaf = {keys:rightKeys, leaf:true};
+      leaf.keys = leftKeys;
+      root.children.splice(idx+1,0,newLeaf);
+      root.keys.splice(idx,0,promoted);
+      root.keys.sort((a,b)=>a-b);
+      BTree.splitting = false;
+      renderBTree();
+      if(cb) cb(promoted);
+    }, 900);
+  } else {
+    renderBTree();
+    if(cb) cb(null);
+  }
+}
+
+function renderBTree(splittingIdx){
+  const svg = el('btreeSvg');
+  const w = svg.clientWidth || 560, h = Math.max(200, svg.clientHeight || 220);
+  svg.setAttribute('viewBox', `0 0 ${w} ${h}`);
+  svg.innerHTML='';
+  const root = BTree.root;
+  const rootW = 46 + root.keys.length*36;
+  const rootX = w/2 - rootW/2, rootY = 16;
+  drawNode(svg, rootX, rootY, root.keys, false, false, 'root');
+  const n = root.children.length;
+  const gap = w/(n+1);
+  root.children.forEach((child,i)=>{
+    const cw = 40 + child.keys.length*34;
+    const cx = gap*(i+1) - cw/2;
+    const cy = h - 64;
+    const isSplitting = BTree.splitting && splittingIdx===i;
+    drawEdge(svg, rootX+rootW*( (i+0.5)/n ), rootY+34, cx+cw/2, cy);
+    drawNode(svg, cx, cy, child.keys, true, isSplitting, `leaf ${i}`);
+  });
+}
+function drawNode(svg,x,y,keys,isLeaf,splitting,tag){
+  const keyW = 34, pad=10, h=30;
+  const w = keys.length*keyW + pad*2;
+  const g = document.createElementNS('http://www.w3.org/2000/svg','g');
+  g.setAttribute('data-tag', tag);
+  const rect = document.createElementNS('http://www.w3.org/2000/svg','rect');
+  rect.setAttribute('x',x); rect.setAttribute('y',y);
+  rect.setAttribute('width',w); rect.setAttribute('height',h);
+  rect.setAttribute('rx',5);
+  rect.setAttribute('class','bt-node-rect'+(splitting?' splitting':''));
+  g.appendChild(rect);
+  keys.forEach((k,i)=>{
+    if(i>0){
+      const line=document.createElementNS('http://www.w3.org/2000/svg','line');
+      line.setAttribute('x1',x+pad+i*keyW); line.setAttribute('x2',x+pad+i*keyW);
+      line.setAttribute('y1',y+4); line.setAttribute('y2',y+h-4);
+      line.setAttribute('stroke','#232B36');
+      g.appendChild(line);
+    }
+    const t = document.createElementNS('http://www.w3.org/2000/svg','text');
+    t.setAttribute('x', x+pad+i*keyW+keyW/2);
+    t.setAttribute('y', y+h/2+4);
+    t.setAttribute('text-anchor','middle');
+    t.setAttribute('class','bt-key-text');
+    t.textContent = k;
+    g.appendChild(t);
+  });
+  const lbl = document.createElementNS('http://www.w3.org/2000/svg','text');
+  lbl.setAttribute('x', x+w/2); lbl.setAttribute('y', y-4);
+  lbl.setAttribute('text-anchor','middle');
+  lbl.setAttribute('class','bt-label-text');
+  lbl.textContent = isLeaf? 'leaf' : 'root';
+  g.appendChild(lbl);
+  g.style.cursor='pointer';
+  g.addEventListener('click',()=>{
+    showTupleFromKeys(keys, isLeaf);
+    setActiveTab('btree');
+  });
+  svg.appendChild(g);
+}
+function drawEdge(svg,x1,y1,x2,y2){
+  const path = document.createElementNS('http://www.w3.org/2000/svg','path');
+  const midY = (y1+y2)/2;
+  path.setAttribute('d', `M ${x1} ${y1} C ${x1} ${midY}, ${x2} ${midY}, ${x2} ${y2}`);
+  path.setAttribute('class','bt-edge');
+  svg.appendChild(path);
+}
+
+/* ---------------------------------- DAG rendering ---------------------------------------- */
+const TYPE_ICON = {
+  scan:'▤', indexscan:'▥', filter:'▽', projection:'▢', join:'⋈',
+  hashbuild:'#', result:'◆', insert:'+', idxupdate:'⌂'
+};
+
+function buildPlanFor(presetKey, customParsed){
+  let raw;
+  if(customParsed){ raw = customParsed; }
+  else { raw = PRESETS[presetKey].buildPlan(); raw.hud = PRESETS[presetKey].hud; raw.insertKey = raw.insertKey; }
+  const mult = DB_MULTIPLIER[State.db] || 1;
+  const nodes = {};
+  Object.keys(raw.nodes).forEach(id=>{
+    const n = raw.nodes[id];
+    nodes[id] = Object.assign({}, n, {
+      total: Math.max(1, Math.round(n.total*mult)),
+      rowsProcessed:0, status:'pending'
+    });
+  });
+  return {kind:raw.kind, nodes, edges:raw.edges, hud:raw.hud, insertKey: raw.insertKey};
+}
+
+function renderDagSkeleton(){
+  const svg = el('dagSvg');
+  const layer = el('dagLayer');
+  qsa('.dagnode', layer).forEach(n=>n.remove());
+  svg.innerHTML='';
+  if(!State.plan){ el('emptyState').style.display='flex'; return; }
+  el('emptyState').style.display='none';
+  const rect = el('canvasArea').getBoundingClientRect();
+  const W = rect.width, H = rect.height;
+  svg.setAttribute('viewBox', `0 0 ${W} ${H}`);
+
+  // edges first (under nodes)
+  State.plan.edges.forEach(([from,to])=>{
+    const a = State.plan.nodes[from], b = State.plan.nodes[to];
+    if(!a||!b) return;
+    const x1=a.x/100*W, y1=a.y/100*H, x2=b.x/100*W, y2=b.y/100*H;
+    const path = document.createElementNS('http://www.w3.org/2000/svg','path');
+    const midY = (y1+y2)/2;
+    path.setAttribute('d', `M ${x1} ${y1} C ${x1} ${midY}, ${x2} ${midY}, ${x2} ${y2}`);
+    path.setAttribute('stroke', '#2A323D');
+    path.setAttribute('stroke-width','1.5');
+    path.setAttribute('fill','none');
+    path.setAttribute('data-edge', from+'>'+to);
+    svg.appendChild(path);
+  });
+
+  Object.keys(State.plan.nodes).forEach(id=>{
+    const n = State.plan.nodes[id];
+    const div = document.createElement('div');
+    div.className = 'dagnode pending';
+    div.id = 'node-'+id;
+    div.style.left = n.x+'%';
+    div.style.top = n.y+'%';
+    div.innerHTML = `<div class="nlabel">${TYPE_ICON[n.type]||'○'} ${n.label}</div><div class="ntype">${n.type}</div><div class="nbadge">0 / ${n.total}</div>`;
+    div.addEventListener('click', ()=>onNodeClick(id));
+    layer.appendChild(div);
+  });
+}
+
+function onNodeClick(id){
+  const n = State.plan.nodes[id];
+  if(!n) return;
+  if(n.type==='indexscan' || n.type==='idxupdate'){
+    setActiveTab('btree');
+  } else {
+    setActiveTab('tuple');
+    showTupleFromNode(n);
+  }
+}
+
+function updateDagVisuals(){
+  if(!State.plan) return;
+  Object.keys(State.plan.nodes).forEach(id=>{
+    const n = State.plan.nodes[id];
+    const div = el('node-'+id);
+    if(!div) return;
+    div.className = 'dagnode '+n.status;
+    const badge = qs('.nbadge', div);
+    if(badge) badge.textContent = `${n.rowsProcessed} / ${n.total}`;
+  });
+  qsa('#dagSvg path[data-edge]').forEach(path=>{
+    const [from,to] = path.getAttribute('data-edge').split('>');
+    const parent = State.plan.nodes[to];
+    path.setAttribute('stroke', (parent && (parent.status==='executing')) ? '#00F0FF' : (parent && parent.status==='done' ? '#00552E' : '#2A323D'));
+  });
+}
+
+/* particle animation along active edges */
+let particleRAF = null;
+function animateParticles(){
+  const layer = el('dagLayer');
+  if(State.view==='dag' && State.plan){
+    if(Math.random() < 0.5){
+      const activeEdges = qsa('#dagSvg path[data-edge]').filter(p=>{
+        const [from,to] = p.getAttribute('data-edge').split('>');
+        return State.plan.nodes[to] && State.plan.nodes[to].status==='executing' && State.plan.nodes[from].rowsProcessed>0;
+      });
+      if(activeEdges.length){
+        const p = activeEdges[Math.floor(Math.random()*activeEdges.length)];
+        spawnParticle(p);
+      }
+    }
+  }
+  particleRAF = requestAnimationFrame(animateParticles);
+}
+function spawnParticle(path){
+  const len = path.getTotalLength();
+  const dot = document.createElement('div');
+  dot.className='particle';
+  el('dagLayer').appendChild(dot);
+  const start = performance.now();
+  const dur = 700/ Number(el('speedSlider').value || 1);
+  function frame(t){
+    const p = clamp((t-start)/dur, 0, 1);
+    const pt = path.getPointAtLength(len*p);
+    dot.style.left = pt.x+'px'; dot.style.top = pt.y+'px';
+    dot.style.opacity = String(1-p*0.15);
+    if(p<1) requestAnimationFrame(frame); else dot.remove();
+  }
+  requestAnimationFrame(frame);
+}
+
+/* ---------------------------------- engine tick ------------------------------------------- */
+function tick(){
+  if(!State.plan) return false;
+  const nodes = State.plan.nodes;
+  // promote ready
+  Object.values(nodes).forEach(n=>{
+    if(n.status==='pending'){
+      const deps = n.dependsOn||[];
+      if(deps.every(d=>nodes[d] && nodes[d].status==='done')) n.status='ready';
+    }
+  });
+  let anyActive=false, anyPending=false;
+  Object.values(nodes).forEach(n=>{
+    if(n.status==='pending') anyPending=true;
+    if(n.status==='ready'||n.status==='executing'){
+      n.status='executing'; anyActive=true;
+      const chunk = Math.max(1, Math.ceil(n.total/9));
+      n.rowsProcessed = Math.min(n.total, n.rowsProcessed+chunk);
+      if(n.rowsProcessed>=n.total) n.status='done';
+
+      if(n.type==='scan' || n.type==='indexscan'){
+        State.telemetry.diskPages += Math.max(1, Math.round(chunk/22));
+        const missRoll = n.type==='indexscan' ? 0.12 : 0.32;
+        if(Math.random() < missRoll){ State.telemetry.misses++; } else { State.telemetry.hits++; }
+        loadBufferFrame(n.label);
+      }
+      if(n.type==='hashbuild'){
+        State.telemetry.memBytes = Math.min(2048*1024, State.telemetry.memBytes + chunk*96);
+      }
+      if(n.type==='join'){
+        State.telemetry.hits += 1;
+      }
+      pushTuple(n);
+    }
+  });
+  State.tickCount++;
+  updateTelemetryUI();
+  updateStatusBar();
+  return anyActive || anyPending;
+}
+
+function loadBufferFrame(sourceLabel){
+  const f = State.bufferFrames[State.frameCursor];
+  f.page = 'P'+(State.pageCounter++);
+  f.dirty = Math.random()<0.18;
+  f.pins = 1;
+  f.hot = true;
+  f.source = sourceLabel;
+  State.bufferFrames.forEach((fr,i)=>{ if(i!==State.frameCursor) fr.hot=false; });
+  State.frameCursor = (State.frameCursor+1) % N_FRAMES;
+  renderFrameGrid();
+}
+
+function pushTuple(n){
+  const hexBytes = Array.from({length:8},()=> Math.floor(Math.random()*256).toString(16).padStart(2,'0')).join(' ');
+  const tuple = {
+    node: n.label, type:n.type,
+    hex: hexBytes,
+    decoded: `{ row_id: ${1000+State.tickCount*3+Math.floor(Math.random()*9)}, table: "${(n.label.match(/\(([^)]+)\)/)||[,'?'])[1]}", processed: ${n.rowsProcessed}/${n.total} }`
+  };
+  State.tuples.unshift(tuple);
+  if(State.tuples.length>10) State.tuples.pop();
+  if(el('tab-tuple') && !el('tab-tuple').classList.contains('hidden')) renderTupleList();
+}
+function showTupleFromNode(n){
+  pushTuple(n);
+  renderTupleList();
+}
+function showTupleFromKeys(keys, isLeaf){
+  const tuple = {
+    node: isLeaf? 'B+ Tree Leaf':'B+ Tree Root', type:'index',
+    hex: keys.map(k=>k.toString(16).padStart(4,'0')).join(' '),
+    decoded: `{ keys: [${keys.join(', ')}], page_offset: 0x${(hashStr(keys.join(','))%9000+1000).toString(16)}, row_ids: [${keys.map(k=>1000+k).join(', ')}] }`
+  };
+  State.tuples.unshift(tuple);
+  if(State.tuples.length>10) State.tuples.pop();
+  renderTupleList();
+}
+
+/* ---------------------------------- telemetry / status ------------------------------------ */
+function updateTelemetryUI(){
+  const t = State.telemetry;
+  const totalReq = t.hits+t.misses;
+  const hitPct = totalReq? Math.round((t.hits/totalReq)*100) : 0;
+  el('tCache').textContent = `Hit: ${hitPct}% · Miss: ${100-hitPct}%`;
+  el('tCacheBar').style.width = hitPct+'%';
+
+  el('tDisk').textContent = `${t.diskPages} Pages (${t.diskPages*4} KB)`;
+  el('tDiskBar').style.width = clamp((t.diskPages/60)*100,0,100)+'%';
+
+  let processed=0, total=0;
+  if(State.plan){
+    Object.values(State.plan.nodes).forEach(n=>{
+      if(n.type==='result'){ processed+=n.rowsProcessed; total+=n.total; }
+    });
+  }
+  el('tRows').textContent = `${processed} / ${total} Rows`;
+  el('tRowsBar').style.width = total? clamp((processed/total)*100,0,100)+'%':'0%';
+
+  const memKB = Math.round(t.memBytes/1024);
+  el('tMem').textContent = `${memKB} KB / 2048 KB`;
+  el('tMemBar').style.width = clamp((memKB/2048)*100,0,100)+'%';
+}
+
+function updateStatusBar(){
+  if(!State.plan){
+    el('statusState').textContent='IDLE'; el('statusOp').textContent='—'; return;
+  }
+  const executing = Object.values(State.plan.nodes).filter(n=>n.status==='executing');
+  const allDone = Object.values(State.plan.nodes).every(n=>n.status==='done');
+  el('statusState').textContent = allDone ? 'COMPLETE' : (executing.length? 'RUNNING':'READY');
+  el('statusOp').textContent = executing.length
+    ? executing.map(n=> n.type.toUpperCase()+': '+n.label).join('  ·  ')
+    : (allDone ? 'All operators exhausted' : 'Awaiting step');
+  const heap = 4.1 + State.telemetry.memBytes/1024/1024 + State.telemetry.diskPages*0.03;
+  el('statusHeap').textContent = `WASM Memory Heap: ${heap.toFixed(1)} MB / 64.0 MB Allocated`;
+}
+
+function renderFrameGrid(){
+  const grid = el('frameGrid');
+  grid.innerHTML='';
+  State.bufferFrames.forEach(f=>{
+    const d = document.createElement('div');
+    d.className = 'frame'+(f.hot?' hot':'');
+    d.innerHTML = f.page
+      ? `<div class="fid">FRAME ${f.id}</div><div class="fmeta">${f.page} · pin:${f.pins}</div><div class="fmeta ${f.dirty?'dirtybit':'cleanbit'}">${f.dirty?'DIRTY':'CLEAN'}</div>`
+      : `<div class="fid">FRAME ${f.id}</div><div class="fmeta">empty</div>`;
+    grid.appendChild(d);
+  });
+}
+function renderTupleList(){
+  const list = el('tupleList');
+  if(!State.tuples.length){
+    list.innerHTML = `<div class="empty-state" style="position:relative;height:100%;">No tuples produced yet.</div>`;
+    return;
+  }
+  list.innerHTML = State.tuples.map(t=>`
+    <div class="tuple-row">
+      <div class="thead">${t.node}</div>
+      <div class="thex">${t.hex}</div>
+      <div class="tdecoded">${t.decoded}</div>
+    </div>`).join('');
+}
+
+/* ---------------------------------- snapshot / time-travel --------------------------------- */
+function snapshot(){
+  if(!State.plan) return;
+  const clone = {
+    nodes: JSON.parse(JSON.stringify(State.plan.nodes)),
+    telemetry: JSON.parse(JSON.stringify(State.telemetry)),
+    frames: JSON.parse(JSON.stringify(State.bufferFrames)),
+    frameCursor: State.frameCursor,
+    tuples: JSON.parse(JSON.stringify(State.tuples)),
+  };
+  State.snapshots = State.snapshots.slice(0, State.snapshotIndex+1);
+  State.snapshots.push(clone);
+  State.snapshotIndex = State.snapshots.length-1;
+  updateStepButtons();
+}
+function restoreSnapshot(idx){
+  const snap = State.snapshots[idx];
+  if(!snap || !State.plan) return;
+  State.plan.nodes = JSON.parse(JSON.stringify(snap.nodes));
+  State.telemetry = JSON.parse(JSON.stringify(snap.telemetry));
+  State.bufferFrames = JSON.parse(JSON.stringify(snap.frames));
+  State.frameCursor = snap.frameCursor;
+  State.tuples = JSON.parse(JSON.stringify(snap.tuples));
+  State.snapshotIndex = idx;
+  updateDagVisuals(); updateTelemetryUI(); updateStatusBar(); renderFrameGrid(); renderTupleList();
+  updateStepButtons();
+}
+function updateStepButtons(){
+  el('stepBackBtn').disabled = State.snapshotIndex<=0;
+  el('stepFwdBtn').disabled = false;
+}
+
+/* ---------------------------------- transport controls -------------------------------------- */
+function stepForward(){
+  if(!State.plan) return;
+  if(State.snapshotIndex < State.snapshots.length-1){
+    restoreSnapshot(State.snapshotIndex+1);
+    return;
+  }
+  const stillGoing = tick();
+  updateDagVisuals();
+  snapshot();
+  if(!stillGoing){ pausePlayback(); }
+}
+function stepBackward(){
+  if(State.snapshotIndex>0) restoreSnapshot(State.snapshotIndex-1);
+}
+function pausePlayback(){
+  State.running=false;
+  el('playBtn').textContent='▶';
+  if(State.playTimer){ clearInterval(State.playTimer); State.playTimer=null; }
+}
+function startPlayback(){
+  if(!State.plan) return;
+  State.running=true;
+  el('playBtn').textContent='❚❚';
+  const speed = Number(el('speedSlider').value);
+  const interval = clamp(650/speed, 40, 2000);
+  if(State.playTimer) clearInterval(State.playTimer);
+  State.playTimer = setInterval(()=>{
+    stepForward();
+  }, interval);
+}
+function togglePlay(){
+  if(State.running) pausePlayback(); else startPlayback();
+}
+
+/* ---------------------------------- run / reset ---------------------------------------------- */
+function currentPresetMatchesEditor(){
+  const val = el('sqlInput').value.trim();
+  if(State.currentPresetKey && PRESETS[State.currentPresetKey]){
+    return PRESETS[State.currentPresetKey].sql.trim() === val;
+  }
+  return false;
+}
+
+function compileAndRun(){
+  const sql = el('sqlInput').value;
+  if(!sql.trim()) return;
+  let plan;
+  if(currentPresetMatchesEditor()){
+    plan = buildPlanFor(State.currentPresetKey, null);
+  } else {
+    State.currentPresetKey = null;
+    qsa('.chip').forEach(c=>c.classList.remove('active'));
+    const parsed = parseCustomSQL(sql);
+    plan = buildPlanFor(null, parsed);
+  }
+  State.plan = plan;
+  State.snapshots = [];
+  State.snapshotIndex = -1;
+  State.telemetry = {hits:0,misses:0,diskPages:0,memBytes:0};
+  State.tuples = [];
+  initFrames();
+  State.frameCursor = 0;
+  State.tickCount = 0;
+  pausePlayback();
+
+  renderDagSkeleton();
+  updateDagVisuals();
+  renderFrameGrid();
+  renderTupleList();
+  updateHud(plan.hud);
+  updateTelemetryUI();
+  updateStatusBar();
+  snapshot();
+
+  if(plan.kind==='insert'){
+    el('statusOp').textContent = 'INSERT scheduled — step forward to trigger B+Tree update';
+    // hook: when idxupdate node becomes executing during ticks, trigger the real btree insert once.
+    plan.__btreeTriggered = false;
+  }
+  el('emptyState').style.display='none';
+}
+
+function maybeTriggerBTree(){
+  if(State.plan && State.plan.kind==='insert' && !State.plan.__btreeTriggered){
+    const idxNode = State.plan.nodes.idxupd;
+    if(idxNode && (idxNode.status==='executing' || idxNode.status==='done')){
+      State.plan.__btreeTriggered = true;
+      setActiveTab('btree');
+      btreeInsert(State.plan.insertKey);
+    }
+  }
+}
+
+function updateHud(hud){
+  const badge = el('hudValue');
+  badge.textContent = hud.label;
+  badge.className = 'hud-value '+hud.tier;
+}
+
+function resetEngine(){
+  pausePlayback();
+  State.plan = null;
+  State.currentPresetKey = null;
+  State.snapshots = []; State.snapshotIndex=-1;
+  State.telemetry = {hits:0,misses:0,diskPages:0,memBytes:0};
+  State.tuples = [];
+  initFrames(); State.frameCursor=0; State.tickCount=0;
+  resetBTree();
+  qsa('.chip').forEach(c=>c.classList.remove('active'));
+  el('sqlInput').value='';
+  el('dirtyDot').classList.remove('show');
+  renderDagSkeleton();
+  renderFrameGrid();
+  renderTupleList();
+  renderBTree();
+  updateHud({label:'—', tier:'mid'});
+  updateTelemetryUI();
+  updateStatusBar();
+  el('emptyState').style.display='flex';
+}
+
+/* ---------------------------------- preset chips / UI wiring ---------------------------------- */
+function buildPresetRow(){
+  const row = el('presetRow');
+  row.innerHTML='';
+  Object.keys(PRESETS).forEach(key=>{
+    const p = PRESETS[key];
+    const btn = document.createElement('button');
+    btn.className = 'chip'+(p.amber?' amber':'');
+    btn.textContent = p.label;
+    btn.dataset.key = key;
+    btn.addEventListener('click', ()=>{
+      State.currentPresetKey = key;
+      qsa('.chip', row).forEach(c=>c.classList.remove('active'));
+      btn.classList.add('active');
+      el('sqlInput').value = p.sql;
+      el('dirtyDot').classList.remove('show');
+      updateHud(p.hud);
+    });
+    row.appendChild(btn);
+  });
+}
+
+function setActiveTab(name){
+  qsa('.tabbtn').forEach(b=> b.classList.toggle('on', b.dataset.tab===name));
+  ['btree','pool','tuple'].forEach(t=> el('tab-'+t).classList.toggle('hidden', t!==name));
+  if(name==='btree') renderBTree();
+  if(name==='pool') renderFrameGrid();
+  if(name==='tuple') renderTupleList();
+}
+
+/* ---------------------------------- 3D memory pipeline view (Three.js) -------------------------- */
+let threeScene=null, threeCamera=null, threeRenderer=null, threeGroup=null, threeFrameMeshes=[], flyingCubes=[];
+function initThree(){
+  const container = el('three-container');
+  const w = container.clientWidth||800, h = container.clientHeight||500;
+  threeScene = new THREE.Scene();
+  threeScene.background = new THREE.Color(0x080b10);
+  threeScene.fog = new THREE.Fog(0x080b10, 8, 30);
+  threeCamera = new THREE.PerspectiveCamera(45, w/h, 0.1, 100);
+  threeCamera.position.set(7,6,9);
+  threeCamera.lookAt(0,0,0);
+  threeRenderer = new THREE.WebGLRenderer({antialias:true, alpha:true});
+  threeRenderer.setSize(w,h);
+  threeRenderer.setPixelRatio(Math.min(window.devicePixelRatio,2));
+  container.innerHTML=''; container.appendChild(threeRenderer.domElement);
+
+  threeGroup = new THREE.Group();
+  threeScene.add(threeGroup);
+
+  const amb = new THREE.AmbientLight(0x334455, 1.1); threeScene.add(amb);
+  const p1 = new THREE.PointLight(0x00f0ff, 1.4, 30); p1.position.set(4,6,4); threeScene.add(p1);
+  const p2 = new THREE.PointLight(0x00e676, 1.0, 30); p2.position.set(-4,3,-3); threeScene.add(p2);
+
+  // buffer pool grid: 4x4 slabs
+  threeFrameMeshes = [];
+  const cols=4, rows=4, spacing=1.35;
+  const geo = new THREE.BoxGeometry(1,0.28,1);
+  for(let i=0;i<cols;i++){
+    for(let j=0;j<rows;j++){
+      const mat = new THREE.MeshStandardMaterial({color:0x101720, emissive:0x0a1620, metalness:0.3, roughness:0.5, transparent:true, opacity:0.92});
+      const mesh = new THREE.Mesh(geo, mat);
+      mesh.position.set((i-cols/2+0.5)*spacing, 0, (j-rows/2+0.5)*spacing);
+      threeGroup.add(mesh);
+      threeFrameMeshes.push(mesh);
+      const edges = new THREE.EdgesGeometry(geo);
+      const line = new THREE.LineSegments(edges, new THREE.LineBasicMaterial({color:0x30363D}));
+      line.position.copy(mesh.position);
+      threeGroup.add(line);
+    }
+  }
+  // disk cylinder
+  const diskGeo = new THREE.CylinderGeometry(1.1,1.1,0.35,28);
+  const diskMat = new THREE.MeshStandardMaterial({color:0x1a2230, emissive:0x00151a, metalness:0.6, roughness:0.35});
+  const disk = new THREE.Mesh(diskGeo, diskMat);
+  disk.position.set(0,-2.4,0);
+  threeGroup.add(disk);
+  const diskEdges = new THREE.LineSegments(new THREE.EdgesGeometry(diskGeo), new THREE.LineBasicMaterial({color:0xFFB300}));
+  diskEdges.position.copy(disk.position);
+  threeGroup.add(diskEdges);
+
+  // subtle rotation via mouse drag
+  let isDown=false, lastX=0,lastY=0;
+  const dom = threeRenderer.domElement;
+  dom.style.cursor='grab';
+  dom.addEventListener('mousedown',e=>{isDown=true;lastX=e.clientX;lastY=e.clientY;dom.style.cursor='grabbing';});
+  window.addEventListener('mouseup',()=>{isDown=false;dom.style.cursor='grab';});
+  window.addEventListener('mousemove',e=>{
+    if(!isDown) return;
+    const dx=e.clientX-lastX, dy=e.clientY-lastY;
+    threeGroup.rotation.y += dx*0.006;
+    threeGroup.rotation.x = clamp(threeGroup.rotation.x + dy*0.004, -0.5, 0.6);
+    lastX=e.clientX; lastY=e.clientY;
+  });
+
+  animateThree();
+}
+function spawnFlyingCube(){
+  if(!threeGroup) return;
+  const geo = new THREE.BoxGeometry(0.26,0.26,0.26);
+  const mat = new THREE.MeshStandardMaterial({color:0x00aaff, emissive:0x0044aa, metalness:0.4, roughness:0.3});
+  const cube = new THREE.Mesh(geo, mat);
+  const target = threeFrameMeshes[Math.floor(Math.random()*threeFrameMeshes.length)];
+  cube.position.set(0,-2.2,0);
+  threeGroup.add(cube);
+  flyingCubes.push({mesh:cube, start:performance.now(), dur: 900, from:new THREE.Vector3(0,-2.2,0), to: target.position.clone().add(new THREE.Vector3(0,0.35,0))});
+}
+function animateThree(){
+  if(threeGroup){ threeGroup.rotation.y += 0.0007; }
+  const now = performance.now();
+  flyingCubes = flyingCubes.filter(fc=>{
+    const p = clamp((now-fc.start)/fc.dur,0,1);
+    fc.mesh.position.lerpVectors(fc.from, fc.to, p);
+    fc.mesh.position.y += Math.sin(p*Math.PI)*0.8;
+    fc.mesh.rotation.x += 0.08; fc.mesh.rotation.y += 0.05;
+    if(p>=1){ threeGroup.remove(fc.mesh); return false; }
+    return true;
+  });
+  threeFrameMeshes.forEach((m,i)=>{
+    const f = State.bufferFrames[i];
+    if(f && f.hot){
+      m.material.color.set(0xFFB300); m.material.emissive.set(0x553300);
+    } else if(f && f.page){
+      m.material.color.set(0x102838); m.material.emissive.set(0x001820);
+    } else {
+      m.material.color.set(0x101720); m.material.emissive.set(0x0a1620);
+    }
+  });
+  if(threeRenderer) threeRenderer.render(threeScene, threeCamera);
+  requestAnimationFrame(animateThree);
+}
+function resizeThree(){
+  if(!threeRenderer) return;
+  const container = el('three-container');
+  const w = container.clientWidth||800, h = container.clientHeight||500;
+  threeRenderer.setSize(w,h);
+  threeCamera.aspect = w/h; threeCamera.updateProjectionMatrix();
+}
+
+/* ---------------------------------- event wiring -------------------------------------------- */
+function wireEvents(){
+  el('sqlInput').addEventListener('input', ()=>{
+    el('dirtyDot').classList.add('show');
+    if(!currentPresetMatchesEditor()){ State.currentPresetKey=null; qsa('.chip').forEach(c=>c.classList.remove('active')); }
+  });
+  el('formatBtn').addEventListener('click', ()=>{
+    const v = el('sqlInput').value;
+    const formatted = v.replace(/\s+/g,' ').trim()
+      .replace(/\bSELECT\b/ig,'SELECT').replace(/\bFROM\b/ig,'\nFROM')
+      .replace(/\bWHERE\b/ig,'\nWHERE').replace(/\bJOIN\b/ig,'\nJOIN')
+      .replace(/\bAND\b/ig,'\n  AND').replace(/,\s*/g,',\n  ');
+    el('sqlInput').value = formatted;
+  });
+  el('clearBtn').addEventListener('click', ()=>{
+    el('sqlInput').value='';
+    el('dirtyDot').classList.remove('show');
+    State.currentPresetKey=null;
+    qsa('.chip').forEach(c=>c.classList.remove('active'));
+  });
+  el('runBtn').addEventListener('click', compileAndRun);
+  el('resetBtn').addEventListener('click', resetEngine);
+
+  el('playBtn').addEventListener('click', togglePlay);
+  el('stepFwdBtn').addEventListener('click', ()=>{ pausePlayback(); stepForward(); });
+  el('stepBackBtn').addEventListener('click', ()=>{ pausePlayback(); stepBackward(); });
+  el('speedSlider').addEventListener('input', ()=>{
+    el('speedVal').textContent = Number(el('speedSlider').value).toFixed(1)+'x';
+    if(State.running) startPlayback();
+  });
+
+  qsa('.tabbtn').forEach(b=> b.addEventListener('click', ()=> setActiveTab(b.dataset.tab)));
+
+  el('viewDagBtn').addEventListener('click', ()=>{
+    State.view='dag';
+    el('viewDagBtn').classList.add('on'); el('view3dBtn').classList.remove('on');
+    el('three-container').classList.remove('on');
+    el('canvasHint').textContent='';
+  });
+  el('view3dBtn').addEventListener('click', ()=>{
+    State.view='3d';
+    el('view3dBtn').classList.add('on'); el('viewDagBtn').classList.remove('on');
+    el('three-container').classList.add('on');
+    el('canvasHint').textContent='drag to rotate · blue cubes = tuples streaming from disk into buffer frames';
+    if(!threeRenderer) initThree(); else resizeThree();
+  });
+
+  let zoom=1;
+  el('zoomInBtn').addEventListener('click', ()=>{ zoom=clamp(zoom+0.1,0.5,2); el('dagLayer').style.transform=`scale(${zoom})`; });
+  el('zoomOutBtn').addEventListener('click', ()=>{ zoom=clamp(zoom-0.1,0.5,2); el('dagLayer').style.transform=`scale(${zoom})`; });
+  el('zoomFitBtn').addEventListener('click', ()=>{ zoom=1; el('dagLayer').style.transform='scale(1)'; });
+
+  el('dbSelect').addEventListener('change', (e)=>{ State.db = e.target.value; });
+
+  el('engineModeToggle').addEventListener('click', ()=>{
+    const lbl = el('engineModeLabel');
+    const isWasm = lbl.textContent==='Rust-WASM-Native';
+    lbl.textContent = isWasm ? 'JavaScript In-Memory Interpreter' : 'Rust-WASM-Native';
+    el('engineStatusText').textContent = isWasm ? 'ENGINE: JS-INTERPRETED' : 'ENGINE: WASM-READY';
+  });
+
+  window.addEventListener('resize', ()=>{
+    renderDagSkeleton(); updateDagVisuals(); renderBTree();
+    if(threeRenderer) resizeThree();
+  });
+}
+
+/* hook maybeTriggerBTree into the tick pipeline by wrapping stepForward's effects */
+const _origStepForward = stepForward;
+stepForward = function(){
+  _origStepForward();
+  maybeTriggerBTree();
+};
+
+/* ---------------------------------- boot ------------------------------------------------------ */
+function boot(){
+  buildPresetRow();
+  wireEvents();
+  resetBTree();
+  renderBTree();
+  renderFrameGrid();
+  renderTupleList();
+  updateTelemetryUI();
+  updateStatusBar();
+  // default preset selection to match textarea content (hashJoin)
+  State.currentPresetKey='hashJoin';
+  const row = el('presetRow');
+  const hjBtn = qsa('.chip', row).find(b=>b.dataset.key==='hashJoin');
+  if(hjBtn) hjBtn.classList.add('active');
+  updateHud(PRESETS.hashJoin.hud);
+  animateParticles();
+}
+boot();
+</script>
+</body>
+</html>
